@@ -26,6 +26,9 @@ public class ARExpressionSender : MonoBehaviour
 
     private float smoothMouth, smoothBlinkL, smoothBlinkR, smoothBrow;
     private string currentSavedIP = "";
+    private bool sendErrorLogged;
+    public const string TargetIPKey = "TargetIP";
+    public const string DefaultTargetIP = "192.168.1.30";
 
     [Serializable]
     public class FaceExpressionPacket
@@ -53,18 +56,20 @@ public class ARExpressionSender : MonoBehaviour
 
     private void PerbaruiEndpointDariPrefs()
     {
-        string savedIP = PlayerPrefs.GetString("TargetIP", targetIP).Trim();
-        if (!string.IsNullOrEmpty(savedIP) && savedIP != currentSavedIP)
+        string savedIP = PlayerPrefs.GetString(TargetIPKey, targetIP).Trim();
+        if (savedIP == currentSavedIP && remoteEndPoint != null) return;
+        currentSavedIP = savedIP;
+
+        if (IPAddress.TryParse(savedIP, out IPAddress parsedIP))
         {
-            if (IPAddress.TryParse(savedIP, out IPAddress parsedIP))
-            {
-                currentSavedIP = savedIP;
-                targetIP = savedIP;
-                remoteEndPoint = new IPEndPoint(parsedIP, targetPort);
-            }
+            targetIP = savedIP;
+            remoteEndPoint = new IPEndPoint(parsedIP, targetPort);
+            sendErrorLogged = false;
         }
         else if (remoteEndPoint == null && IPAddress.TryParse(targetIP, out IPAddress defaultIP))
         {
+            // IP tersimpan tidak valid: tetap kirim ke IP bawaan.
+            Debug.LogWarning($"[ARExpressionSender] IP tersimpan tidak valid: '{savedIP}', memakai {targetIP}");
             remoteEndPoint = new IPEndPoint(defaultIP, targetPort);
         }
     }
@@ -159,7 +164,14 @@ public class ARExpressionSender : MonoBehaviour
             byte[] data = Encoding.UTF8.GetBytes(json);
             udpClient.Send(data, data.Length, remoteEndPoint);
         }
-        catch { }
+        catch (Exception e)
+        {
+            if (!sendErrorLogged)
+            {
+                Debug.LogWarning($"[ARExpressionSender] Gagal kirim UDP ke {remoteEndPoint}: {e.Message}");
+                sendErrorLogged = true;
+            }
+        }
     }
 
     private float NormalizeAngle(float angle)

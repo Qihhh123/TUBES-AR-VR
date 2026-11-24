@@ -1,3 +1,4 @@
+using System.Net;
 using UnityEngine;
 using TMPro;
 
@@ -9,7 +10,7 @@ public class IPConfigUI : MonoBehaviour
     void Start()
     {
         // Tampilkan IP tersimpan di kotak ketik saat aplikasi dibuka
-        string savedIP = PlayerPrefs.GetString("TargetIP", "192.168.1.10");
+        string savedIP = PlayerPrefs.GetString(ARExpressionSender.TargetIPKey, ARExpressionSender.DefaultTargetIP);
         if (ipInputField != null)
         {
             ipInputField.text = savedIP;
@@ -22,7 +23,12 @@ public class IPConfigUI : MonoBehaviour
         if (ipInputField != null && !string.IsNullOrWhiteSpace(ipInputField.text))
         {
             string ipBaru = ipInputField.text.Trim();
-            PlayerPrefs.SetString("TargetIP", ipBaru);
+            if (!IPAddress.TryParse(ipBaru, out _))
+            {
+                if (statusText != null) statusText.text = "IP tidak valid: " + ipBaru;
+                return;
+            }
+            PlayerPrefs.SetString(ARExpressionSender.TargetIPKey, ipBaru);
             PlayerPrefs.Save();
 
             if (statusText != null)

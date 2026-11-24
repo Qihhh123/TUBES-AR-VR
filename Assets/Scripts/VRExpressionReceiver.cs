@@ -108,12 +108,13 @@ public class VRExpressionReceiver : MonoBehaviour
 
     private void ReceiveLoop()
     {
+        UdpClient client = udpClient;
         IPEndPoint anyIP = new IPEndPoint(IPAddress.Any, 0);
-        while (isRunning)
+        while (isRunning && client != null)
         {
             try
             {
-                byte[] data = udpClient.Receive(ref anyIP);
+                byte[] data = client.Receive(ref anyIP);
                 string json = Encoding.UTF8.GetString(data);
                 FaceExpressionPacket parsed = JsonUtility.FromJson<FaceExpressionPacket>(json);
                 if (parsed != null)
@@ -126,8 +127,10 @@ public class VRExpressionReceiver : MonoBehaviour
                 }
             }
             catch (SocketException) { }
+            catch (ObjectDisposedException) { }
             catch (Exception e)
             {
+                if (!isRunning) break;
                 Debug.LogWarning($"[VRExpressionReceiver] Error UDP: {e.Message}");
             }
         }
@@ -269,8 +272,21 @@ public class VRExpressionReceiver : MonoBehaviour
 
     void OnDestroy()
     {
+        StopUDPReceiver();
+    }
+
+    void OnApplicationQuit()
+    {
+        StopUDPReceiver();
+    }
+
+    private void StopUDPReceiver()
+    {
         isRunning = false;
+        // Close() membuka blokir Receive(); loop berhenti karena isRunning sudah false.
         try { udpClient?.Close(); } catch { }
-        if (receiveThread != null && receiveThread.IsAlive) receiveThread.Abort();
+        udpClient = null;
+        if (receiveThread != null && receiveThread.IsAlive) receiveThread.Join(500);
+        receiveThread = null;
     }
 }

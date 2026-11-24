@@ -19,12 +19,13 @@ public class FaceFilterSwitcher : MonoBehaviour
 
     void OnEnable()
     {
-        faceManager.trackablesChanged.AddListener(OnFacesChanged);
+        if (faceManager == null) faceManager = FindFirstObjectByType<ARFaceManager>();
+        if (faceManager != null) faceManager.trackablesChanged.AddListener(OnFacesChanged);
     }
 
     void OnDisable()
     {
-        faceManager.trackablesChanged.RemoveListener(OnFacesChanged);
+        if (faceManager != null) faceManager.trackablesChanged.RemoveListener(OnFacesChanged);
     }
 
     void OnFacesChanged(ARTrackablesChangedEventArgs<ARFace> args)
@@ -35,7 +36,7 @@ public class FaceFilterSwitcher : MonoBehaviour
 
     public void SwitchModel(int index)
     {
-        if (index < 0 || index >= facePrefabs.Length) return;
+        if (facePrefabs == null || index < 0 || index >= facePrefabs.Length || faceManager == null) return;
         currentIndex = index;
 
         foreach (var face in faceManager.trackables)
@@ -44,6 +45,8 @@ public class FaceFilterSwitcher : MonoBehaviour
 
     void ApplyFilter(ARFace face)
     {
+        if (face == null || facePrefabs == null || currentIndex >= facePrefabs.Length || facePrefabs[currentIndex] == null) return;
+
         foreach (Transform child in face.transform)
             Destroy(child.gameObject);
 

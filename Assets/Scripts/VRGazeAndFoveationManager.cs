@@ -12,6 +12,8 @@ public class VRGazeAndFoveationManager : MonoBehaviour
     public TMP_Text gazeSourceLabel;
     public bool useMouseSimulation = true;
     public float dwellTimeRequired = 1.2f;
+    [Tooltip("Bila terisi dan aktif, reticle, mata avatar, dan dwell diatur UnitEyeGazeBridge; komponen ini hanya mengatur foveation dan panel performa.")]
+    public UnitEyeGazeBridge gazeBridge;
 
     [Header("2. Mata Avatar Mengikuti Gaze")]
     public Transform eyeLeft;
@@ -35,6 +37,9 @@ public class VRGazeAndFoveationManager : MonoBehaviour
     void Start()
     {
         if (vrCamera == null) vrCamera = Camera.main;
+        if (gazeBridge == null) gazeBridge = GetComponent<UnitEyeGazeBridge>();
+        if (gazeBridge == null) gazeBridge = FindFirstObjectByType<UnitEyeGazeBridge>();
+        if (gazeBridge != null) gazeBridge.SetFoveationActive(foveationActive);
         UpdateFoveationVisual();
     }
 
@@ -45,8 +50,12 @@ public class VRGazeAndFoveationManager : MonoBehaviour
         UpdatePerformanceStats();
     }
 
+    private bool BridgeOwnsGaze => gazeBridge != null && gazeBridge.isActiveAndEnabled;
+
     private void HandleGazeAndDwellUI()
     {
+        if (BridgeOwnsGaze) return;
+
         Vector2 screenPoint = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
         if (useMouseSimulation && Mouse.current != null)
         {
@@ -146,17 +155,22 @@ public class VRGazeAndFoveationManager : MonoBehaviour
     public void ToggleFoveation()
     {
         foveationActive = !foveationActive;
+        if (gazeBridge != null) gazeBridge.SetFoveationActive(foveationActive);
         UpdateFoveationVisual();
     }
 
     public void ToggleGazeSource()
     {
-        useMouseSimulation = !useMouseSimulation;
+        if (BridgeOwnsGaze)
+            gazeBridge.ToggleInputMode();
+        else
+            useMouseSimulation = !useMouseSimulation;
     }
 
     public void SetFovealRadius(float value)
     {
         fovealRadius = value;
+        if (gazeBridge != null) gazeBridge.SetFovealRadius(value);
     }
 
     private void UpdateFoveationVisual()

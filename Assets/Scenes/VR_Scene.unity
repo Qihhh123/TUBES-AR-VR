@@ -280,7 +280,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
+  m_Material: {fileID: 2100000, guid: c949da4b9bb34780924a7120041491ee, type: 2}
   m_Color: {r: 0.078431375, g: 0.078431375, b: 0.11764706, a: 0.37254903}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
@@ -2915,7 +2915,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1959414766}
-  m_Enabled: 0
+  m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 9af2568441afc0f42af040ab27e13739, type: 3}
   m_Name: 
@@ -2973,7 +2973,7 @@ MonoBehaviour:
   eyeLeft: {fileID: 246078828}
   eyeRight: {fileID: 428322261}
   eyeMaxAngle: 15
-  foveationMaterial: {fileID: 0}
+  foveationMaterial: {fileID: 2100000, guid: c949da4b9bb34780924a7120041491ee, type: 2}
   foveationActive: 1
   fovealRadius: 0.3
   useUnitEyeWebcam: 1
