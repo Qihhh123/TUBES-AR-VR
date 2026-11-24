@@ -2,6 +2,8 @@ using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.InputSystem;
 using TMPro;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 public class VRGazeAndFoveationManager : MonoBehaviour
 {
@@ -29,6 +31,13 @@ public class VRGazeAndFoveationManager : MonoBehaviour
     [Header("4. Panel Performa")]
     public TMP_Text performanceText;
 
+    [Header("5. Optimasi Render saat Foveation Aktif")]
+    [Tooltip("Render scale URP saat foveation aktif (1 = resolusi penuh). Nilai asli dikembalikan saat foveation mati atau komponen nonaktif.")]
+    [Range(0.5f, 1f)] public float foveatedRenderScale = 0.7f;
+
+    private UniversalRenderPipelineAsset urpAsset;
+    private float originalRenderScale = 1f;
+
     private Button currentHoveredButton;
     private float currentDwellTimer = 0f;
     private float fpsTimer = 0f;
@@ -40,7 +49,30 @@ public class VRGazeAndFoveationManager : MonoBehaviour
         if (gazeBridge == null) gazeBridge = GetComponent<UnitEyeGazeBridge>();
         if (gazeBridge == null) gazeBridge = FindFirstObjectByType<UnitEyeGazeBridge>();
         if (gazeBridge != null) gazeBridge.SetFoveationActive(foveationActive);
+        urpAsset = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
+        if (urpAsset != null) originalRenderScale = urpAsset.renderScale;
+        else Debug.LogWarning("[Foveation] Render pipeline aktif bukan URP; render scale tidak diubah.");
+        ApplyRenderScale();
         UpdateFoveationVisual();
+    }
+
+    void OnEnable()
+    {
+        if (urpAsset != null) ApplyRenderScale();
+    }
+
+    void OnDisable()
+    {
+        // Render scale disimpan di aset pipeline; kembalikan supaya tidak terbawa ke scene lain atau ke file aset.
+        if (urpAsset != null) urpAsset.renderScale = originalRenderScale;
+    }
+
+    private float CurrentRenderScale =>
+        foveationActive ? Mathf.Min(foveatedRenderScale, originalRenderScale) : originalRenderScale;
+
+    private void ApplyRenderScale()
+    {
+        if (urpAsset != null) urpAsset.renderScale = CurrentRenderScale;
     }
 
     void Update()
@@ -123,7 +155,7 @@ public class VRGazeAndFoveationManager : MonoBehaviour
         if (foveationLabel != null)
         {
             string status = foveationActive ? "<color=green>ON</color>" : "<color=yellow>OFF</color>";
-            foveationLabel.text = $"Foveated Rendering: {status} (Simulasi Visual & Rasio Piksel)";
+            foveationLabel.text = $"Foveated Rendering: {status} (Vignette + Render Scale {CurrentRenderScale * 100f:F0}%)";
         }
     }
 
@@ -136,7 +168,8 @@ public class VRGazeAndFoveationManager : MonoBehaviour
         {
             float fps = frameCount / fpsTimer;
             float frameMs = 1000f / Mathf.Max(fps, 1f);
-            float pixelRatio = foveationActive ? Mathf.Clamp(fovealRadius * 2.2f, 0.35f, 0.85f) * 100f : 100f;
+            float scale = urpAsset != null ? urpAsset.renderScale : 1f;
+            float pixelRatio = scale * scale * 100f;
 
             if (performanceText != null)
             {
@@ -144,7 +177,8 @@ public class VRGazeAndFoveationManager : MonoBehaviour
                     $"<b>Panel Performa VR</b>\n" +
                     $"FPS: {fps:F1} FPS\n" +
                     $"Frame Time: {frameMs:F2} ms\n" +
-                    $"Rasio Piksel Penuh: {pixelRatio:F0}%";
+                    $"Render Scale: {scale * 100f:F0}%\n" +
+                    $"Piksel Dirender: {pixelRatio:F0}%";
             }
 
             frameCount = 0;
@@ -156,6 +190,7 @@ public class VRGazeAndFoveationManager : MonoBehaviour
     {
         foveationActive = !foveationActive;
         if (gazeBridge != null) gazeBridge.SetFoveationActive(foveationActive);
+        ApplyRenderScale();
         UpdateFoveationVisual();
     }
 
