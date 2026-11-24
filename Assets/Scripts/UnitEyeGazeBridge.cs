@@ -32,6 +32,20 @@ public class UnitEyeGazeBridge : MonoBehaviour
     private float _dwellTimer;
     private Button _activeButton;
 
+    private Quaternion _eyeLeftRest = Quaternion.identity;
+    private Quaternion _eyeRightRest = Quaternion.identity;
+    private string _unitEyeStatus = "";
+    private float _noFaceSeconds;
+    private bool _noFaceWarned;
+    private const float NoFaceWarnSeconds = 5f;
+
+    void Start()
+    {
+        if (eyeLeft != null) _eyeLeftRest = eyeLeft.localRotation;
+        if (eyeRight != null) _eyeRightRest = eyeRight.localRotation;
+        _currentScreenPos = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+    }
+
     void Update()
     {
         Vector2 targetScreenPos = ReadGazeScreenPosition();
@@ -50,11 +64,19 @@ public class UnitEyeGazeBridge : MonoBehaviour
             try
             {
                 if (UnitEyeAPI.IsUserPresent())
+                {
+                    _unitEyeStatus = "wajah terdeteksi";
+                    _noFaceSeconds = 0f;
                     return UnitEyeAPI.GetGazeLocationInScreen();
+                }
+                _unitEyeStatus = WebCamTexture.devices.Length == 0
+                    ? "tidak ada webcam"
+                    : "wajah belum terdeteksi";
+                WarnIfNoFace();
             }
             catch (System.InvalidOperationException)
             {
-                // Prefab UnitEye belum ada di scene ini.
+                _unitEyeStatus = "prefab UnitEye tidak ada di scene";
             }
 
             // Wajah belum terdeteksi: arahkan ke tengah layar.
@@ -63,6 +85,21 @@ public class UnitEyeGazeBridge : MonoBehaviour
 
         return GetPointerPositionFallback();
     }
+    private void WarnIfNoFace()
+    {
+        _noFaceSeconds += Time.unscaledDeltaTime;
+        if (_noFaceWarned || _noFaceSeconds < NoFaceWarnSeconds)
+            return;
+
+        _noFaceWarned = true;
+        var names = new System.Text.StringBuilder();
+        foreach (var device in WebCamTexture.devices)
+            names.Append(names.Length > 0 ? ", " : "").Append(device.name);
+        Debug.LogWarning($"[UnitEyeGazeBridge] Wajah belum terdeteksi selama {NoFaceWarnSeconds:F0} detik. " +
+                         $"Webcam terdeteksi ({WebCamTexture.devices.Length}): {names}. " +
+                         "Pilih webcam lain lewat Gaze UI UnitEye (Next Cam), pastikan wajah terang dan berjarak sekitar 50 cm.");
+    }
+
     private Vector2 GetPointerPositionFallback()
     {
         if (Mouse.current != null)
@@ -86,7 +123,7 @@ public class UnitEyeGazeBridge : MonoBehaviour
         if (gazeSourceLabel != null)
         {
             gazeSourceLabel.text = useUnitEyeWebcam
-                ? "Sumber Gaze: Simulasi Webcam (UnitEye)"
+                ? $"Sumber Gaze: Webcam (UnitEye) - {_unitEyeStatus}"
                 : "Sumber Gaze: Simulasi Mouse / Simulator";
         }
     }
@@ -106,9 +143,15 @@ public class UnitEyeGazeBridge : MonoBehaviour
         float yaw = (viewport.x - 0.5f) * 2f * eyeMaxAngle;
         float pitch = -(viewport.y - 0.5f) * 2f * eyeMaxAngle;
 
+        // Avatar yang menghadap kamera (kepala diputar 180 derajat) membalik sumbu kiri-kanan;
+        // balik yaw supaya pupil bergerak ke arah layar yang sama dengan titik gaze.
+        Transform head = eyeLeft != null ? eyeLeft.parent : eyeRight.parent;
+        if (Camera.main != null && head != null && Vector3.Dot(head.forward, Camera.main.transform.forward) < 0f)
+            yaw = -yaw;
+
         Quaternion eyeRot = Quaternion.Euler(pitch, yaw, 0f);
-        if (eyeLeft != null) eyeLeft.localRotation = eyeRot;
-        if (eyeRight != null) eyeRight.localRotation = eyeRot;
+        if (eyeLeft != null) eyeLeft.localRotation = _eyeLeftRest * eyeRot;
+        if (eyeRight != null) eyeRight.localRotation = _eyeRightRest * eyeRot;
     }
 
     private void UpdateDwellButtons(Vector2 screenPos)
