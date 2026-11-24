@@ -9,6 +9,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 6938641877020301110}
+  - component: {fileID: 5334015931938223990}
   m_Layer: 0
   m_Name: Kacamata_AR
   m_TagString: Untagged
@@ -32,6 +33,19 @@ Transform:
   - {fileID: 6522437845916182681}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}
+--- !u!114 &5334015931938223990
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 552580594295099521}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5d87bd45cfc214ce48ce8b882225dd11, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.XR.ARFoundation::UnityEngine.XR.ARFoundation.ARFace
+  m_DestroyOnRemoval: 1
 --- !u!1001 &6705547397656252274
 PrefabInstance:
   m_ObjectHideFlags: 0
