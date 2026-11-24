@@ -36,6 +36,8 @@ public class UnitEyeGazeBridge : MonoBehaviour
 
     [Header("4. Mode Input")]
     public bool useUnitEyeWebcam = true;
+    [Tooltip("Sembunyikan preview webcam layar penuh UnitEye supaya avatar terlihat; pelacakan wajah tetap berjalan. Tombol V menampilkan/menyembunyikan.")]
+    public bool hideWebcamPreview = true;
 
     private Vector2 _currentScreenPos;
     private float _dwellTimer;
@@ -52,6 +54,7 @@ public class UnitEyeGazeBridge : MonoBehaviour
     private bool _hasIrisDirection;
     private Vector2 _irisDirection;
     private FaceMeshSolution _faceMesh;
+    private float _nextFaceMeshSearch;
     private readonly float[] _irisOffsets = new float[4];
     private Vector2 _irisNeutralSum;
     private int _irisNeutralCount;
@@ -68,6 +71,9 @@ public class UnitEyeGazeBridge : MonoBehaviour
     {
         if (Keyboard.current != null && Keyboard.current.cKey.wasPressedThisFrame)
             RecenterIris();
+        if (Keyboard.current != null && Keyboard.current.vKey.wasPressedThisFrame)
+            hideWebcamPreview = !hideWebcamPreview;
+        ApplyWebcamPreview();
 
         Vector2 targetScreenPos = ReadGazeScreenPosition();
         float t = Time.deltaTime * smoothSpeed;
@@ -88,7 +94,13 @@ public class UnitEyeGazeBridge : MonoBehaviour
         {
             try
             {
-                if (UnitEyeAPI.IsUserPresent())
+                // Objek UnitEye yang dimatikan menyimpan landmark terakhir, jadi IsUserPresent tetap true
+                // dengan data beku; anggap tidak ada pelacakan.
+                if (!UnitEyeAPI.GetGazeReference().isActiveAndEnabled || !FaceMeshRunning())
+                {
+                    _unitEyeStatus = "UnitEye nonaktif: centang lagi UnitEyeUsingHomulerMediapipe, preview webcam sudah disembunyikan otomatis";
+                }
+                else if (UnitEyeAPI.IsUserPresent())
                 {
                     _noFaceSeconds = 0f;
                     _hasIrisDirection = eyesFollowIris && TryReadIrisDirection(out _irisDirection);
@@ -97,16 +109,19 @@ public class UnitEyeGazeBridge : MonoBehaviour
                         : "wajah terdeteksi";
                     return UnitEyeAPI.GetGazeLocationInScreen();
                 }
-                _unitEyeStatus = WebCamTexture.devices.Length == 0
-                    ? "tidak ada webcam"
-                    : "wajah belum terdeteksi";
-                WarnIfNoFace();
-                if (_noFaceSeconds > 1f)
-                    RecenterIris();
+                else
+                {
+                    _unitEyeStatus = WebCamTexture.devices.Length == 0
+                        ? "tidak ada webcam"
+                        : "wajah belum terdeteksi";
+                    WarnIfNoFace();
+                    if (_noFaceSeconds > 1f)
+                        RecenterIris();
+                }
             }
             catch (System.InvalidOperationException)
             {
-                _unitEyeStatus = "prefab UnitEye tidak ada di scene";
+                _unitEyeStatus = "UnitEye tidak ada atau nonaktif sejak awal (centang UnitEyeUsingHomulerMediapipe)";
             }
 
             // Wajah belum terdeteksi: sementara pakai mouse supaya reticle, foveation, dan mata avatar tetap jalan.
@@ -121,9 +136,7 @@ public class UnitEyeGazeBridge : MonoBehaviour
     private bool TryReadIrisDirection(out Vector2 direction)
     {
         direction = Vector2.zero;
-        if (_faceMesh == null)
-            _faceMesh = FindAnyObjectByType<FaceMeshSolution>();
-        if (_faceMesh == null || _faceMesh.FaceLandmarks == null)
+        if (!FaceMeshRunning() || _faceMesh.FaceLandmarks == null)
             return false;
 
         HomulerFunctions.FillIrisFeatures(_faceMesh.FaceLandmarks, _irisOffsets, 0);
@@ -145,6 +158,22 @@ public class UnitEyeGazeBridge : MonoBehaviour
         float y = -delta.y * irisGainY * (invertIrisY ? -1f : 1f);
         direction = new Vector2(Mathf.Clamp(x, -1f, 1f), Mathf.Clamp(y, -1f, 1f));
         return true;
+    }
+
+    private bool FaceMeshRunning()
+    {
+        if (_faceMesh == null && Time.unscaledTime >= _nextFaceMeshSearch)
+        {
+            _faceMesh = FindAnyObjectByType<FaceMeshSolution>();
+            _nextFaceMeshSearch = Time.unscaledTime + 1f;
+        }
+        return _faceMesh != null && _faceMesh.isActiveAndEnabled;
+    }
+
+    private void ApplyWebcamPreview()
+    {
+        if (useUnitEyeWebcam && FaceMeshRunning())
+            _faceMesh.IsRendering = !hideWebcamPreview;
     }
 
     public void RecenterIris()
