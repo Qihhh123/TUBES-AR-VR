@@ -17,7 +17,7 @@ public class UnitEyeGazeBridge : MonoBehaviour
     [Header("2. Mata Avatar")]
     public Transform eyeLeft;
     public Transform eyeRight;
-    public float eyeMaxAngle = 15f;
+    public float eyeMaxAngle = 35f;
 
     [Header("3. Simulasi Foveated Rendering")]
     public Material foveationMaterial;
@@ -79,8 +79,9 @@ public class UnitEyeGazeBridge : MonoBehaviour
                 _unitEyeStatus = "prefab UnitEye tidak ada di scene";
             }
 
-            // Wajah belum terdeteksi: arahkan ke tengah layar.
-            return new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
+            // Wajah belum terdeteksi: sementara pakai mouse supaya reticle, foveation, dan mata avatar tetap jalan.
+            _unitEyeStatus += " (sementara pakai mouse)";
+            return GetPointerPositionFallback();
         }
 
         return GetPointerPositionFallback();

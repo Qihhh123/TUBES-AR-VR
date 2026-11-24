@@ -2972,7 +2972,7 @@ MonoBehaviour:
   smoothSpeed: 15
   eyeLeft: {fileID: 246078828}
   eyeRight: {fileID: 428322261}
-  eyeMaxAngle: 15
+  eyeMaxAngle: 35
   foveationMaterial: {fileID: 2100000, guid: c949da4b9bb34780924a7120041491ee, type: 2}
   foveationActive: 1
   fovealRadius: 0.3
