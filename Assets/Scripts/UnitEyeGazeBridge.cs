@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using UnityEngine.InputSystem;
 using TMPro;
 using UnitEye;
+using Mediapipe.Unity.FaceMesh;
 
 public class UnitEyeGazeBridge : MonoBehaviour
 {
@@ -18,6 +19,14 @@ public class UnitEyeGazeBridge : MonoBehaviour
     public Transform eyeLeft;
     public Transform eyeRight;
     public float eyeMaxAngle = 35f;
+    [Tooltip("Saat wajah terdeteksi UnitEye, pupil avatar mengikuti posisi iris user dari landmark FaceMesh (tanpa kalibrasi). Bila mati, pupil mengikuti titik gaze di layar.")]
+    public bool eyesFollowIris = true;
+    [Tooltip("Penguat geser iris (relatif lebar mata) ke sudut pupil; naikkan bila gerak pupil terlalu kecil.")]
+    public float irisGainX = 8f;
+    public float irisGainY = 12f;
+    [Tooltip("Centang bila pupil avatar bergerak berlawanan arah dengan mata user.")]
+    public bool invertIrisX = false;
+    public bool invertIrisY = false;
 
     [Header("3. Simulasi Foveated Rendering")]
     public Material foveationMaterial;
@@ -39,6 +48,15 @@ public class UnitEyeGazeBridge : MonoBehaviour
     private bool _noFaceWarned;
     private const float NoFaceWarnSeconds = 5f;
 
+    private Vector2 _eyeDirection;
+    private bool _hasIrisDirection;
+    private Vector2 _irisDirection;
+    private FaceMeshSolution _faceMesh;
+    private readonly float[] _irisOffsets = new float[4];
+    private Vector2 _irisNeutralSum;
+    private int _irisNeutralCount;
+    private const int IrisNeutralSamples = 30;
+
     void Start()
     {
         if (eyeLeft != null) _eyeLeftRest = eyeLeft.localRotation;
@@ -48,31 +66,43 @@ public class UnitEyeGazeBridge : MonoBehaviour
 
     void Update()
     {
+        if (Keyboard.current != null && Keyboard.current.cKey.wasPressedThisFrame)
+            RecenterIris();
+
         Vector2 targetScreenPos = ReadGazeScreenPosition();
-        _currentScreenPos = Vector2.Lerp(_currentScreenPos, targetScreenPos, Time.deltaTime * smoothSpeed);
+        float t = Time.deltaTime * smoothSpeed;
+        _currentScreenPos = Vector2.Lerp(_currentScreenPos, targetScreenPos, t);
+        Vector2 targetEyeDirection = _hasIrisDirection ? _irisDirection : ScreenToEyeDirection(targetScreenPos);
+        _eyeDirection = Vector2.Lerp(_eyeDirection, targetEyeDirection, t);
 
         UpdateReticleAndLabel();
-        UpdateAvatarEyes(_currentScreenPos);
+        UpdateAvatarEyes(_eyeDirection);
         UpdateDwellButtons(_currentScreenPos);
         UpdateFoveationShader(_currentScreenPos);
     }
 
     private Vector2 ReadGazeScreenPosition()
     {
+        _hasIrisDirection = false;
         if (useUnitEyeWebcam)
         {
             try
             {
                 if (UnitEyeAPI.IsUserPresent())
                 {
-                    _unitEyeStatus = "wajah terdeteksi";
                     _noFaceSeconds = 0f;
+                    _hasIrisDirection = eyesFollowIris && TryReadIrisDirection(out _irisDirection);
+                    _unitEyeStatus = _hasIrisDirection
+                        ? "wajah terdeteksi, mata avatar mengikuti iris (C: atur ulang titik tengah)"
+                        : "wajah terdeteksi";
                     return UnitEyeAPI.GetGazeLocationInScreen();
                 }
                 _unitEyeStatus = WebCamTexture.devices.Length == 0
                     ? "tidak ada webcam"
                     : "wajah belum terdeteksi";
                 WarnIfNoFace();
+                if (_noFaceSeconds > 1f)
+                    RecenterIris();
             }
             catch (System.InvalidOperationException)
             {
@@ -86,6 +116,43 @@ public class UnitEyeGazeBridge : MonoBehaviour
 
         return GetPointerPositionFallback();
     }
+    // Geser iris rata-rata kedua mata terhadap titik tengah sudut mata (satuan lebar mata),
+    // dikurangi posisi netral yang direkam dari sampel pertama sesudah wajah terdeteksi.
+    private bool TryReadIrisDirection(out Vector2 direction)
+    {
+        direction = Vector2.zero;
+        if (_faceMesh == null)
+            _faceMesh = FindAnyObjectByType<FaceMeshSolution>();
+        if (_faceMesh == null || _faceMesh.FaceLandmarks == null)
+            return false;
+
+        HomulerFunctions.FillIrisFeatures(_faceMesh.FaceLandmarks, _irisOffsets, 0);
+        Vector2 offset = new Vector2(
+            (_irisOffsets[0] + _irisOffsets[2]) * 0.5f,
+            (_irisOffsets[1] + _irisOffsets[3]) * 0.5f);
+
+        if (_irisNeutralCount < IrisNeutralSamples)
+        {
+            _irisNeutralSum += offset;
+            _irisNeutralCount++;
+            return true;
+        }
+
+        // Gambar webcam tidak dicerminkan dan sumbu Y landmark mengarah ke bawah: balik kedua sumbu
+        // supaya avatar bergerak seperti bayangan cermin user (lihat kanan -> pupil ke kanan layar).
+        Vector2 delta = offset - _irisNeutralSum / _irisNeutralCount;
+        float x = -delta.x * irisGainX * (invertIrisX ? -1f : 1f);
+        float y = -delta.y * irisGainY * (invertIrisY ? -1f : 1f);
+        direction = new Vector2(Mathf.Clamp(x, -1f, 1f), Mathf.Clamp(y, -1f, 1f));
+        return true;
+    }
+
+    public void RecenterIris()
+    {
+        _irisNeutralSum = Vector2.zero;
+        _irisNeutralCount = 0;
+    }
+
     private void WarnIfNoFace()
     {
         _noFaceSeconds += Time.unscaledDeltaTime;
@@ -129,20 +196,27 @@ public class UnitEyeGazeBridge : MonoBehaviour
         }
     }
 
-    private void UpdateAvatarEyes(Vector2 screenPos)
+    // Titik layar -> arah pupil dalam rentang -1..1 per sumbu (0 = tengah layar).
+    private Vector2 ScreenToEyeDirection(Vector2 screenPos)
     {
-        if (eyeLeft == null && eyeRight == null)
-            return;
-
         Vector2 viewport = Camera.main != null
             ? (Vector2)Camera.main.ScreenToViewportPoint(screenPos)
             : new Vector2(
                 Screen.width > 0 ? screenPos.x / Screen.width : 0.5f,
                 Screen.height > 0 ? screenPos.y / Screen.height : 0.5f
             );
+        return new Vector2(
+            Mathf.Clamp((viewport.x - 0.5f) * 2f, -1f, 1f),
+            Mathf.Clamp((viewport.y - 0.5f) * 2f, -1f, 1f));
+    }
 
-        float yaw = (viewport.x - 0.5f) * 2f * eyeMaxAngle;
-        float pitch = -(viewport.y - 0.5f) * 2f * eyeMaxAngle;
+    private void UpdateAvatarEyes(Vector2 direction)
+    {
+        if (eyeLeft == null && eyeRight == null)
+            return;
+
+        float yaw = direction.x * eyeMaxAngle;
+        float pitch = -direction.y * eyeMaxAngle;
 
         // Avatar yang menghadap kamera (kepala diputar 180 derajat) membalik sumbu kiri-kanan;
         // balik yaw supaya pupil bergerak ke arah layar yang sama dengan titik gaze.
